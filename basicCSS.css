@@ -7,8 +7,9 @@ body {
 }
 
 h1 {
+    font-size: 56px;
     text-align: center;
-    font-size: 48px;
+    margin-bottom: 20px;
 }
 
 h2 {
