@@ -1,23 +1,23 @@
-body {
+* {
+    box-sizing: border-box;
     margin: 0;
-    font-family: Arial, Helvetica, sans-serif;
+    padding: 0;
 }
 
-main {
-    margin-left: 200px;
-    padding: 20px;
+body {
+    font-family: "Times New Roman", serif;
 }
 
 nav#menuItems {
     position: fixed;
     left: 0;
     top: 0;
-    width: 200px;
-    height: 100%;
+    width: 15%;
+    height: 100vh;
     background-color: black;
 }
 
-nav button {
+nav#menuItems button {
     width: 100%;
     padding: 15px;
     background-color: blue;
@@ -27,16 +27,14 @@ nav button {
     font-size: 16px;
 }
 
-nav button:hover {
+nav#menuItems button:hover {
     background-color: goldenrod;
 }
 
 #jumpMenu {
     list-style: none;
-    margin: 0;
-    padding: 0;
     display: none;
-    background-color: goldenrod;
+    background-color: #d6a620;
 }
 
 #recentArticles:hover + #jumpMenu,
@@ -46,9 +44,9 @@ nav button:hover {
 
 #jumpMenu li a {
     display: block;
-    padding: 8px;
-    text-decoration: none;
+    padding: 10px;
     color: blue;
+    text-decoration: underline;
 }
 
 #jumpMenu li a:hover {
@@ -56,29 +54,61 @@ nav button:hover {
     color: white;
 }
 
+main {
+    margin-left: 15%;
+    padding-top: 140px;
+}
+
 header {
+    position: fixed;
+    top: 0;
+    left: 15%;
+    width: 85%;
     background-color: red;
-    color: black;
     text-align: center;
-    padding: 30px;
-    font-size: 32px;
+    z-index: 1000;
+    padding: 20px 0;
+}
+
+header p {
+    font-size: 36px;
+    font-weight: bold;
+    color: black;
+    margin-bottom: 15px;
+}
+
+h1 {
+    text-align: center;
+    font-size: 42px;
+    margin: 40px 0;
 }
 
 #container {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 30px;
+    justify-content: center;
+    padding: 20px;
 }
 
 article {
+    width: 300px;
+    line-height: 1.6;
     color: #b0b0b0;
     transition: all 2s;
-    overflow: hidden;
 }
 
 article:hover {
     color: #333;
     transform: scale(1.05);
+}
+
+article h2 {
+    margin-bottom: 10px;
+}
+
+article p {
+    margin-bottom: 10px;
 }
 
 article p:first-of-type::first-letter {
@@ -89,10 +119,6 @@ article p:first-of-type::first-letter {
 article a[href*="google"]::after {
     content: url("arrowarrow.png");
     margin-left: 6px;
-}
-
-article a {
-    font-size: 14px;
 }
 
 #thanks {
@@ -106,7 +132,7 @@ article a {
 }
 
 footer {
-    border-top: 1px solid #ccc;
-    margin-top: 40px;
-    padding-top: 20px;
+    margin-top: 60px;
+    padding: 20px;
+    text-align: center;
 }
