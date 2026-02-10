@@ -96,10 +96,13 @@ article a {
 }
 
 #thanks {
-    background-color: lightblue;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background-color: #9ad6ff;
     padding: 20px;
-    margin-top: 30px;
-    width: fit-content;
+    font-size: 28px;
+    font-weight: bold;
 }
 
 footer {
