@@ -1,38 +1,348 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="en">
 <head>
-    <title>PokeAPI Team Builder</title>
-    <link rel="stylesheet" href="PokeAPI.css">
-    <script src="PokeAPI.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pokemon Team Builder</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 18px; }
+    .card { max-width: 720px; border: 2px solid #d4a017; border-radius: 18px; padding: 18px; margin: 0 auto; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .row > * { margin: 4px 0; }
+    img { image-rendering: pixelated; }
+    .preview { display: grid; place-items: center; min-height: 240px; margin: 10px 0; }
+    .moves { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+    select { width: 100%; padding: 6px; }
+    button { padding: 6px 10px; cursor: pointer; }
+    .muted { color: #666; font-size: 0.9rem; }
+    hr { margin: 16px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    td, th { border: 1px solid #222; padding: 8px; vertical-align: top; }
+    ul { margin: 0; padding-left: 18px; }
+  </style>
 </head>
-
 <body>
+  <div class="card">
+    <h2 style="text-align:center; margin-top:0;">Pokemon Team Builder</h2>
 
-<div class="card">
+    <div class="row" style="justify-content:center;">
+      <label for="query"><strong>Name or ID</strong></label>
+      <input id="query" type="text" placeholder="e.g. 143 or snorlax" />
+      <button id="findBtn" type="button">Find</button>
+    </div>
+    <p class="muted" style="text-align:center; margin-top:6px;">
+      Tip: You can use numbers 1–151 if you don’t know names.
+    </p>
 
-    <h2>Name or ID</h2>
-    <input type="text" id="pokemonInput">
-    <button id="searchBtn">Find</button>
-
-    <div>
-        <img id="pokemonImage">
+    <div class="preview">
+      <div id="status" class="muted">Ready for input…</div>
+      <img id="sprite" alt="" style="display:none; max-width: 240px;" />
     </div>
 
-    <audio id="pokemonAudio" controls></audio>
+    <div class="row" style="justify-content:center;">
+      <audio id="cry" controls preload="none" style="width:min(520px, 100%); display:none;"></audio>
+    </div>
 
-    <div class="moves">
+    <div class="moves" id="movesArea" style="display:none;">
+      <div>
         <select id="move1"></select>
         <select id="move2"></select>
+      </div>
+      <div>
         <select id="move3"></select>
         <select id="move4"></select>
+      </div>
     </div>
 
-    <button id="addBtn">Add to Team</button>
+    <div class="row" style="justify-content:center;">
+      <button id="addBtn" type="button" disabled>Add to Team</button>
+    </div>
 
-    <div class="team-container" id="team"></div>
+    <hr />
 
-</div>
+    <div id="teamArea" style="display:none;">
+      <h3 style="margin: 0 0 8px 0;">Team</h3>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:120px;">Pokemon</th>
+            <th>Moves</th>
+          </tr>
+        </thead>
+        <tbody id="teamBody"></tbody>
+      </table>
+    </div>
+  </div>
 
-<script src="PokeAPI.js"></script>
+<script>
+ 
+  const CACHE_PREFIX = "poke_cache_v1:";
+  const CACHE_TTL_MS = 1000 * 60 * 60 * 24; // 24 hours
+
+  function cacheKey(pokeIdOrName) {
+    return CACHE_PREFIX + String(pokeIdOrName).trim().toLowerCase();
+  }
+
+  function readCache(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || typeof obj !== "object") return null;
+      if (Date.now() - obj.savedAt > CACHE_TTL_MS) {
+        localStorage.removeItem(key);
+        return null;
+      }
+      return obj.data;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeCache(key, data) {
+    try {
+      localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data }));
+    } catch {
+      // If storage is full or blocked, just skip caching.
+    }
+  }
+
+ 
+  const el = (id) => document.getElementById(id);
+
+  const queryEl = el("query");
+  const findBtn = el("findBtn");
+  const addBtn = el("addBtn");
+
+  const statusEl = el("status");
+  const spriteEl = el("sprite");
+  const cryEl = el("cry");
+
+  const movesArea = el("movesArea");
+  const moveEls = [el("move1"), el("move2"), el("move3"), el("move4")];
+
+  const teamArea = el("teamArea");
+  const teamBody = el("teamBody");
+
+  // Current loaded pokemon (for Add to Team)
+  let currentPokemon = null;
+  const team = []; // { name, sprite, moves: [..] }
+
+  function setStatus(msg) {
+    statusEl.textContent = msg;
+    statusEl.style.display = "block";
+  }
+
+  function clearPreview() {
+    currentPokemon = null;
+    spriteEl.style.display = "none";
+    spriteEl.src = "";
+    spriteEl.alt = "";
+    cryEl.style.display = "none";
+    cryEl.src = "";
+    movesArea.style.display = "none";
+    moveEls.forEach(s => s.innerHTML = "");
+    addBtn.disabled = true;
+  }
+
+  function formatName(name) {
+    if (!name) return "";
+    return name.replaceAll("-", " ");
+  }
+
+  function buildMoveOptions(selectEl, moves) {
+    // Add a placeholder so it’s obvious you can choose
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "— choose a move —";
+    selectEl.appendChild(placeholder);
+
+    for (const mv of moves) {
+      const opt = document.createElement("option");
+      opt.value = mv;
+      opt.textContent = formatName(mv);
+      selectEl.appendChild(opt);
+    }
+  }
+
+  function getCryUrl(data) {
+    // PokeAPI v2 commonly includes: data.cries.latest and data.cries.legacy
+    if (data?.cries?.latest) return data.cries.latest;
+    if (data?.cries?.legacy) return data.cries.legacy;
+    return ""; // Some entries may not have a cry URL
+  }
+
+  function getSpriteUrl(data) {
+    // Prefer official artwork if available, else fall back to default sprite
+    return (
+      data?.sprites?.other?.["official-artwork"]?.front_default ||
+      data?.sprites?.front_default ||
+      ""
+    );
+  }
+
+  function uniqueMovesFromData(data) {
+    const raw = (data?.moves || []).map(m => m?.move?.name).filter(Boolean);
+    // Deduplicate but preserve order
+    const seen = new Set();
+    const uniq = [];
+    for (const mv of raw) {
+      if (!seen.has(mv)) { seen.add(mv); uniq.push(mv); }
+    }
+    return uniq;
+  }
+
+  async function fetchPokemon(idOrName) {
+    const cleaned = String(idOrName).trim().toLowerCase();
+    if (!cleaned) throw new Error("Please enter a Pokémon name or ID.");
+
+    const key = cacheKey(cleaned);
+    const cached = readCache(key);
+    if (cached) return cached;
+
+    const url = `https://pokeapi.co/api/v2/pokemon/${encodeURIComponent(cleaned)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error("Pokémon not found. Try a valid name (e.g., pikachu) or ID (1–151).");
+    }
+    const data = await res.json();
+    writeCache(key, data);
+
+    // Also cache by numeric ID and canonical name for extra cache hits:
+    if (data?.id) writeCache(cacheKey(String(data.id)), data);
+    if (data?.name) writeCache(cacheKey(String(data.name)), data);
+
+    return data;
+  }
+
+  function loadPokemonToUI(data) {
+    const name = data?.name || "";
+    const spriteUrl = getSpriteUrl(data);
+    const cryUrl = getCryUrl(data);
+    const moves = uniqueMovesFromData(data);
+
+    clearPreview();
+
+    currentPokemon = {
+      id: data.id,
+      name,
+      sprite: spriteUrl,
+      cry: cryUrl,
+      moves
+    };
+
+    if (spriteUrl) {
+      spriteEl.src = spriteUrl;
+      spriteEl.alt = name;
+      spriteEl.style.display = "block";
+      statusEl.style.display = "none";
+    } else {
+      setStatus(`Loaded ${formatName(name)}, but no image was available.`);
+    }
+
+    if (cryUrl) {
+      cryEl.src = cryUrl;
+      cryEl.style.display = "block";
+    } else {
+      cryEl.style.display = "none";
+      cryEl.src = "";
+    }
+
+    // Populate 4 dropdown menus with moves
+    movesArea.style.display = "grid";
+    moveEls.forEach(sel => {
+      sel.innerHTML = "";
+      buildMoveOptions(sel, moves);
+    });
+
+    addBtn.disabled = false;
+  }
+
+  function renderTeam() {
+    teamBody.innerHTML = "";
+
+    for (const member of team) {
+      const tr = document.createElement("tr");
+
+      const left = document.createElement("td");
+      const img = document.createElement("img");
+      img.src = member.sprite || "";
+      img.alt = member.name;
+      img.style.maxWidth = "80px";
+      img.style.display = "block";
+      img.style.margin = "0 auto 6px auto";
+
+      const label = document.createElement("div");
+      label.style.textAlign = "center";
+      label.textContent = formatName(member.name);
+
+      left.appendChild(img);
+      left.appendChild(label);
+
+      const right = document.createElement("td");
+      const ul = document.createElement("ul");
+      for (const mv of member.moves) {
+        const li = document.createElement("li");
+        li.textContent = formatName(mv || "(none)");
+        ul.appendChild(li);
+      }
+      right.appendChild(ul);
+
+      tr.appendChild(left);
+      tr.appendChild(right);
+      teamBody.appendChild(tr);
+    }
+
+    teamArea.style.display = team.length ? "block" : "none";
+  }
+
+  function getSelectedMoves() {
+    return moveEls.map(sel => sel.value).filter(Boolean);
+  }
+
+  
+  async function onFind() {
+    const q = queryEl.value;
+    clearPreview();
+    setStatus("Loading…");
+
+    try {
+      const data = await fetchPokemon(q);
+      loadPokemonToUI(data);
+    } catch (err) {
+      clearPreview();
+      setStatus(err.message || "Something went wrong.");
+    }
+  }
+
+  function onAddToTeam() {
+    if (!currentPokemon) return;
+
+    const selectedMoves = getSelectedMoves();
+
+    team.push({
+      name: currentPokemon.name,
+      sprite: currentPokemon.sprite,
+      moves: [
+        moveEls[0].value || "",
+        moveEls[1].value || "",
+        moveEls[2].value || "",
+        moveEls[3].value || ""
+      ]
+    });
+
+    renderTeam();
+  }
+
+  findBtn.addEventListener("click", onFind);
+  addBtn.addEventListener("click", onAddToTeam);
+
+  queryEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") onFind();
+  });
+
+  clearPreview();
+  setStatus("Ready for input…");
+</script>
 </body>
 </html>
